@@ -1,5 +1,7 @@
 # local-shared-memory-mcp
 
+> 🚧 **In progress.** This project is in early development. Tools, CLI commands and the storage format may change, and the web app below is not built yet.
+
 **One local memory that every AI tool shares.** Start a task in Claude, continue it in Cursor or another MCP-capable model, and nothing has to be re-explained.
 
 ## The problem
@@ -109,9 +111,40 @@ Restart the apps afterwards. Set `MEMORY_DB_PATH` to move the database.
 npm test
 ```
 
-## Limits and roadmap
+## Limits
 
 - Search matches words, not meaning: "which language does the user like" will not find "prefers TypeScript" unless a word overlaps.
 - A model only saves memory if it chooses to call the tools; the server instructions push it to, but it is not guaranteed.
 - ChatGPT supports only remote MCP connectors, so it needs an HTTP/SSE mode behind a tunnel (planned, not built).
-- Planned: semantic (embedding) search, memory cleanup and expiry, a small web UI to review and edit memories.
+
+## Roadmap
+
+### Web app to see and review memory
+
+A small local web app so you can see what your AIs have stored and decide what stays. Planned, not built.
+
+- Runs only on `127.0.0.1`, started with `ctx-memory ui`. Reads the same SQLite file as the server, so there is no cloud and no account.
+
+**Phase 1: read-only viewer**
+- Project list with memory counts.
+- Browse memories by project, kind and tag, with search.
+- View the handoff history.
+- Preview exactly what `get_context` would send to a model, with its token size, so you can see the cost of your memory.
+
+**Phase 2: review and edit**
+- Edit a memory's text, tags, importance and project; delete memories.
+- "New since your last visit" inbox for memories AI tools saved, with approve or reject.
+- Find and merge near-duplicates.
+- Pin memories so they always appear in `get_context`.
+
+**Phase 3: polish**
+- Timeline of handoffs, showing which model wrote each.
+- Cleanup suggestions for old or never-used memories, with expiry.
+- Import and export from the UI.
+- Optional access token for the local server.
+
+### Other planned work
+
+- Semantic (embedding) search.
+- HTTP/SSE mode so ChatGPT and other remote clients can connect.
+- Automatic memory cleanup and expiry.
