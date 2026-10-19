@@ -43,6 +43,24 @@ For apps without MCP support (for example ChatGPT web), run `node src/cli.js exp
 | `list_projects` | Projects with memory counts |
 | `export_markdown` | Memory as Markdown for pasting anywhere |
 
+## Manual control (no AI needed)
+
+You can manage the same database yourself from the terminal:
+
+```bash
+node src/cli.js add "I prefer tabs over spaces" -k preference -t style -p myproject
+node src/cli.js list -p myproject
+node src/cli.js search "tabs"
+node src/cli.js edit 3 --text "new wording" -i 5
+node src/cli.js forget 3
+node src/cli.js handoff save "Goal: ship auth. Next: login route." -p myproject --from claude
+node src/cli.js handoff show -p myproject
+node src/cli.js export myproject            # Markdown to paste into any AI
+node src/cli.js import notes.md -p myproject  # each "- line" becomes a memory
+```
+
+`add` and `handoff save` also read from stdin, so `pbpaste | node src/cli.js handoff save` stores whatever is on your clipboard.
+
 ## Setup
 
 Requires Node >= 22.13.

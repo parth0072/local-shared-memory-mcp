@@ -29,6 +29,10 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
     CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
       INSERT INTO memories_fts(memories_fts, rowid, text, tags) VALUES ('delete', old.id, old.text, old.tags);
     END;
+    CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE OF text, tags ON memories BEGIN
+      INSERT INTO memories_fts(memories_fts, rowid, text, tags) VALUES ('delete', old.id, old.text, old.tags);
+      INSERT INTO memories_fts(rowid, text, tags) VALUES (new.id, new.text, new.tags);
+    END;
     CREATE TABLE IF NOT EXISTS handoffs (
       id INTEGER PRIMARY KEY,
       project TEXT NOT NULL,
@@ -85,6 +89,15 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
         ? db.prepare("SELECT * FROM memories WHERE project IN (?, 'global') ORDER BY importance DESC, last_used DESC LIMIT ?").all(project, limit)
         : db.prepare("SELECT * FROM memories ORDER BY importance DESC, last_used DESC LIMIT ?").all(limit);
       return rows.map(fmt);
+    },
+
+    update(id, { text, kind, project, tags, importance }) {
+      const cur = db.prepare("SELECT * FROM memories WHERE id = ?").get(id);
+      if (!cur) return false;
+      db.prepare("UPDATE memories SET text=?, kind=?, project=?, tags=?, importance=?, last_used=? WHERE id=?").run(
+        text ?? cur.text, kind ?? cur.kind, project ?? cur.project,
+        tags ? tags.join(" ") : cur.tags, importance ?? cur.importance, now(), id);
+      return true;
     },
 
     forget(id) {
