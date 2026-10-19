@@ -107,7 +107,7 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
     },
 
     // AND match first (every word must appear, last word as prefix); widen to OR only if too few hits.
-    recall({ query, project, kind, limit = 5 }) {
+    recall({ query, project, kind, limit = 5, touch = true }) {
       const ts = terms(query);
       if (!ts.length) return [];
       const fetch = Math.min(limit * 3, 60);
@@ -118,7 +118,7 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
         for (const r of search(ftsQuery(ts, "OR"), opts, fetch)) if (!seen.has(r.id)) rows.push(r);
       }
       const out = dedupe(rows.map(fmt)).slice(0, limit);
-      if (out.length) {
+      if (touch && out.length) {
         // one batched write, and only for rows not touched in the last hour
         const ids = out.map((r) => r.id);
         stmt(`UPDATE memories SET last_used = ? WHERE id IN (${ids.map(() => "?").join(",")}) AND last_used < ?`)
@@ -164,6 +164,27 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
     latestHandoff(project = "global") {
       const r = stmt("SELECT * FROM handoffs WHERE project = ? ORDER BY created_at DESC, id DESC LIMIT 1").get(project);
       return r ? { ...r, created_ms: Number(r.created_at), created_at: new Date(Number(r.created_at)).toISOString() } : null;
+    },
+
+    // Plain newest-first listing for browsing (read-only; used by the web viewer).
+    list({ project, kind, tag, limit = 200 }) {
+      const where = [];
+      const args = [];
+      if (project) { where.push("project = ?"); args.push(project); }
+      if (kind) { where.push("kind = ?"); args.push(kind); }
+      if (tag) { where.push("(' ' || tags || ' ') LIKE ?"); args.push(`% ${tag} %`); }
+      return stmt(`SELECT * FROM memories ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY created_at DESC, id DESC LIMIT ?`)
+        .all(...args, limit).map(fmt);
+    },
+
+    handoffs({ project, limit = 50 } = {}) {
+      const rows = project
+        ? stmt("SELECT * FROM handoffs WHERE project = ? ORDER BY created_at DESC, id DESC LIMIT ?").all(project, limit)
+        : stmt("SELECT * FROM handoffs ORDER BY created_at DESC, id DESC LIMIT ?").all(limit);
+      return rows.map((r) => ({
+        id: Number(r.id), project: r.project, summary: r.summary, from_model: r.from_model,
+        created_at: new Date(Number(r.created_at)).toISOString(),
+      }));
     },
 
     projects() {

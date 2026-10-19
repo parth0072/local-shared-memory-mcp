@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { serve } from "./server.js";
+import { startUi } from "./ui.js";
 import { openStore, toMarkdown } from "./store.js";
 
 const self = resolve(fileURLToPath(import.meta.url));
@@ -48,6 +49,7 @@ const opts = {
   text: { type: "string" },
   from: { type: "string" },
   limit: { type: "string", short: "n" },
+  port: { type: "string" },
 };
 const { values: o, positionals } = parseArgs({ args: process.argv.slice(3), options: opts, allowPositionals: true });
 const tagList = (v) => (v ? v.split(",").map((t) => t.trim().replace(/\s+/g, "_")).filter(Boolean) : undefined);
@@ -58,6 +60,7 @@ const show = (m) => console.log(`#${m.id} [${m.kind}] ${m.text}${m.tags.length ?
 const help = `usage: ctx-memory <command>
   serve                          run the MCP server (default)
   init                           register in Claude Desktop / Cursor / Windsurf
+  ui [--port 4777]               read-only web viewer on http://127.0.0.1:4777
   add <text> [-p proj] [-k kind] [-t a,b] [-i 1-5]
   list [-p proj] [-n 20]         most important / recently used memories
   search <query> [-p proj]
@@ -71,7 +74,16 @@ const help = `usage: ctx-memory <command>
 
 if (cmd === "serve") await serve();
 else if (cmd === "init") init();
-else if (cmd === "help" || cmd === "--help") console.log(help);
+else if (cmd === "ui") {
+  const port = Number(o.port) || 4777;
+  try {
+    await startUi({ port });
+    console.log(`Memory viewer (read-only): http://127.0.0.1:${port}  (Ctrl+C to stop)`);
+  } catch (e) {
+    console.error(e.code === "EADDRINUSE" ? `port ${port} is in use; try --port <other>` : e.message);
+    process.exit(1);
+  }
+} else if (cmd === "help" || cmd === "--help") console.log(help);
 else {
   const store = openStore();
   try {
