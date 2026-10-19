@@ -105,6 +105,65 @@ claude mcp add ctx-memory -- node /ABS/PATH/src/cli.js serve
 
 Restart the apps afterwards. Set `MEMORY_DB_PATH` to move the database.
 
+## Switching between AI tools
+
+Every tool talks to the same server and the same database (`~/.memory/ctx-memory.db`), so you only configure each tool once. Claude Desktop, Cursor and Windsurf are covered by `init`. For the command-line tools below, add the server by hand.
+
+> These configs are written from each tool's documented format and have not all been tested. If one does not load, check that tool's MCP docs.
+
+Replace `/path/to/local-shared-memory-mcp` with where you cloned this repo.
+
+**Gemini CLI**: `~/.gemini/settings.json`
+
+```json
+{
+  "mcpServers": {
+    "ctx-memory": {
+      "command": "node",
+      "args": ["/path/to/local-shared-memory-mcp/src/cli.js", "serve"]
+    }
+  }
+}
+```
+
+**Codex CLI**: `~/.codex/config.toml`
+
+```toml
+[mcp_servers.ctx-memory]
+command = "node"
+args = ["/path/to/local-shared-memory-mcp/src/cli.js", "serve"]
+```
+
+**opencode**: `~/.config/opencode/opencode.json` (or `opencode.json` in a project)
+
+```json
+{
+  "mcp": {
+    "ctx-memory": {
+      "type": "local",
+      "command": ["node", "/path/to/local-shared-memory-mcp/src/cli.js", "serve"],
+      "enabled": true
+    }
+  }
+}
+```
+
+Restart the tool after editing its config.
+
+### How to switch
+
+1. In the tool you are leaving, ask: *"Save a handoff for project `myapp` with the goal, decisions so far, current state and next steps."* It calls `save_handoff`.
+2. Open the next tool in the same project.
+3. Start with: *"Call get_context for project `myapp` and continue from there."* You get the latest handoff plus the top memories, capped at about 700 tokens.
+4. To check what was saved from a terminal: `node src/cli.js handoff show -p myapp`.
+
+### Tips
+
+- Use the same project name in every tool. Memory is grouped by project, so `myapp` and `my-app` will not connect.
+- Ask for `get_context` yourself in the first message. Not every tool follows the server's built-in instruction to call it.
+- Save small facts as you go ("remember that we use Postgres 16"), so you do not depend only on the final handoff.
+- If a tool cannot connect, run `node src/cli.js export myapp` and paste the output into its first message.
+
 ## Test
 
 ```bash
