@@ -4,3 +4,4 @@ node_modules/
 *.db-*
 *.bak
 .DS_Store
+CLAUDE.md
