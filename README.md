@@ -148,3 +148,7 @@ A small local web app so you can see what your AIs have stored and decide what s
 - Semantic (embedding) search.
 - HTTP/SSE mode so ChatGPT and other remote clients can connect.
 - Automatic memory cleanup and expiry.
+
+## License
+
+[MIT](LICENSE)

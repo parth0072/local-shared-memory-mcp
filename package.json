@@ -2,6 +2,7 @@
   "name": "ctx-memory-mcp",
   "version": "0.1.0",
   "description": "Local MCP memory server for carrying context between AI models",
+  "license": "MIT",
   "type": "module",
   "bin": { "ctx-memory": "src/cli.js" },
   "main": "src/server.js",
