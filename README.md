@@ -68,8 +68,6 @@ Handoff (2d ago, claude): Goal: ship auth. Next: login route.
 
 - Tool descriptions and server instructions are kept short, since they are sent every turn.
 
-Speed and size have not been measured on the new code yet. `bench/bench.js` loads 100,000 fake memories and times `recall`; the first baseline on the old code was about 10 ms median per recall and about 1,775 tokens of context.
-
 ## Manual control (no AI needed)
 
 You can manage the same database yourself from the terminal:
