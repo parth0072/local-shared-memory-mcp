@@ -1,6 +1,6 @@
 # local-shared-memory-mcp
 
-> 🚧 **In progress.** This project is in early development. Tools, CLI commands and the storage format may change, and the web app below is not built yet.
+> 🚧 **In progress.** This project is in early development. Tools, CLI commands and the storage format may change, and the web app is only a read-only viewer so far.
 
 **One local memory that every AI tool shares.** Start a task in Claude, continue it in Cursor or another MCP-capable model, and nothing has to be re-explained.
 
@@ -180,15 +180,22 @@ npm test
 
 ### Web app to see and review memory
 
-A small local web app so you can see what your AIs have stored and decide what stays. Planned, not built.
+A small local web app so you can see what your AIs have stored and decide what stays. Phase 1 is built; Phases 2 and 3 are planned.
 
-- Runs only on `127.0.0.1`, started with `ctx-memory ui`. Reads the same SQLite file as the server, so there is no cloud and no account.
+- Runs only on `127.0.0.1`, started with `node src/cli.js ui`. Reads the same SQLite file as the server, so there is no cloud and no account.
 
-**Phase 1: read-only viewer**
+**Phase 1: read-only viewer (built)**
+
+```bash
+node src/cli.js ui              # http://127.0.0.1:4777
+node src/cli.js ui --port 5000
+```
+
 - Project list with memory counts.
-- Browse memories by project, kind and tag, with search.
+- Browse memories by project, kind and tag, with search (viewing never changes a memory's "last used" time).
 - View the handoff history.
-- Preview exactly what `get_context` would send to a model, with its token size, so you can see the cost of your memory.
+- Preview exactly what `get_context` would send to a model, with its token size and an adjustable cap, so you can see the cost of your memory.
+- GET requests only, and requests with a non-local `Host` header are refused.
 
 **Phase 2: review and edit**
 - Edit a memory's text, tags, importance and project; delete memories.
