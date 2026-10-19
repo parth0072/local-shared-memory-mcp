@@ -35,13 +35,40 @@ For apps without MCP support (for example ChatGPT web), run `node src/cli.js exp
 
 | Tool | Purpose |
 | --- | --- |
-| `get_context` | Latest handoff and top memories; called first in every chat |
+| `get_context` | Latest handoff and top memories, capped by `max_tokens` (default 700); called first in every chat |
 | `remember` | Save a fact, preference, decision, task or note (dedupes, supports tags, project and importance 1-5) |
-| `recall` | Keyword search ranked by relevance and importance |
+| `recall` | Keyword search ranked by relevance and importance (5 results by default) |
 | `forget` | Delete a memory by id |
 | `save_handoff` | Store a "where we left off" summary for the next model |
 | `list_projects` | Projects with memory counts |
-| `export_markdown` | Memory as Markdown for pasting anywhere |
+| `export_markdown` | Full memory as plain text for pasting anywhere (no size cap) |
+
+## Fast search, small context
+
+**Search** (SQLite FTS5 index):
+
+- Every word must match first; it only widens to "any word" when there are too few hits.
+- Filler words ("the", "which", "user") are ignored, and the last word matches as a prefix, so `typesc` finds `typescript`.
+- Porter stemming makes `prefers` match `preferred`. Tag matches count double.
+- Prepared statements are cached, `recall` does at most one small batched write, and the SQLite cache and memory-mapped reads are tuned.
+- Existing databases are migrated and the index rebuilt automatically on first start.
+
+**Context** (what the model actually receives):
+
+- `get_context` fills a token budget with the highest-ranked memories (importance, decayed by time since last use) and stops there. The handoff gets at most 40% of the budget.
+- Near-duplicate memories (over 80% shared words) are collapsed.
+- Replies are compact plain text, not JSON, with relative ages and long lines cut at 280 characters:
+
+```
+Handoff (2d ago, claude): Goal: ship auth. Next: login route.
+#2 API runs on port 9090
+#1 pref: I prefer tabs over spaces #style #code
+(+12 more; use recall)
+```
+
+- Tool descriptions and server instructions are kept short, since they are sent every turn.
+
+Speed and size have not been measured on the new code yet. `bench/bench.js` loads 100,000 fake memories and times `recall`; the first baseline on the old code was about 10 ms median per recall and about 1,775 tokens of context.
 
 ## Manual control (no AI needed)
 
@@ -86,6 +113,7 @@ npm test
 
 ## Limits and roadmap
 
+- Search matches words, not meaning: "which language does the user like" will not find "prefers TypeScript" unless a word overlaps.
 - A model only saves memory if it chooses to call the tools; the server instructions push it to, but it is not guaranteed.
 - ChatGPT supports only remote MCP connectors, so it needs an HTTP/SSE mode behind a tunnel (planned, not built).
 - Planned: semantic (embedding) search, memory cleanup and expiry, a small web UI to review and edit memories.
