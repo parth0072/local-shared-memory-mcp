@@ -25,7 +25,7 @@ Restart the apps. Set `MEMORY_DB_PATH` to move the database.
 1. In the tool you are leaving: *"Save a handoff for project `myapp`: goal, decisions, state, next steps."*
 2. In the next tool: *"Call get_context for project `myapp` and continue."*
 
-Use the same project name everywhere, ask for `get_context` yourself (not every tool does it automatically), and `remember` small facts as you go. For tools without MCP (e.g. ChatGPT web): `node src/cli.js export myapp` and paste the output.
+Use the same project name everywhere, ask for `get_context` yourself (most tools don't call it automatically; Claude Code with the hooks installed does, see Auto-save), and `remember` small facts as you go. For tools without MCP (e.g. ChatGPT web): `node src/cli.js export myapp` and paste the output.
 
 ## Tools
 
@@ -51,7 +51,7 @@ Handoff (2d ago, claude): Goal: ship auth. Next: login route.
 ## Auto-save
 
 - **All tools:** the server tells models to `remember` proactively, and `get_context` reminds them to `save_handoff` before the chat ends. Models can still ignore this.
-- **Claude Code (hooks):** loads memory automatically at session start and saves a handoff at session end, with no model involved.
+- **Claude Code (hooks):** loads memory automatically at session start and saves a handoff at session end, with no model involved. Hooks work only in Claude Code; other tools get the nudges above.
 
 ```bash
 node src/cli.js hooks install              # prints the settings.json block
@@ -93,15 +93,17 @@ node src/cli.js export myapp          # Markdown to paste anywhere
 node src/cli.js import notes.md -p myapp   # each "- line" becomes a memory
 node src/cli.js ui                # read-only viewer at http://127.0.0.1:4777
 node src/cli.js usage --days 30   # tokens this server sent to your AIs
+node src/cli.js pending           # auto-saved memories awaiting review; then: approve <id|all> | reject <id>
 ```
 
-The viewer shows memories (search, project/kind/tag filters), handoffs, a `get_context` preview with token size, and a **Usage** tab. It binds to `127.0.0.1`, answers GET only and refuses non-local `Host` headers.
+The viewer shows memories (search, project/kind/tag filters; auto-saved ones show a "pending review" badge until approved), handoffs, a `get_context` preview with token size, and a **Usage** tab. It binds to `127.0.0.1`, answers GET only and refuses non-local `Host` headers.
 
 Usage tracking stores one row per tool call (time, tool, AI app, project, estimated tokens = chars ÷ 4), never memory text, and prunes after 90 days. Turn it off with `MEMORY_USAGE=off`.
+
 ## Limits and roadmap
 
 - Search matches words, not meaning, and a model saves memory only if it chooses to call the tools.
-- Planned: editing and deleting in the viewer, an approve/reject inbox for AI-saved memories, merge duplicates, pinning, expiry and cleanup, semantic search, and an HTTP/SSE mode for ChatGPT and other remote clients.
+- Planned: editing and deleting in the viewer, approve/reject buttons for pending memories in the viewer (the command line already has them), merge duplicates, pinning, expiry and cleanup, semantic search, and an HTTP/SSE mode for ChatGPT and other remote clients.
 
 Run tests with `npm test`.
 
