@@ -85,6 +85,14 @@
 </div>
 <script>
 "use strict";
+// The page needs the viewer's /api endpoints, so it only works when served over http(s).
+const served = /^https?:$/.test(location.protocol);
+if (!served) {
+  document.body.replaceChildren(Object.assign(document.createElement("p"), {
+    style: "padding:24px;max-width:560px;margin:0 auto",
+    textContent: "Open this page through the viewer: run `node src/cli.js ui`, then visit http://127.0.0.1:4777",
+  }));
+}
 const state = { project: "", kind: "", tag: "", q: "", tab: "memories", budget: 700, days: 7 };
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => {
@@ -233,14 +241,14 @@ async function renderView() {
 
 function refresh() { renderProjects(); renderView(); }
 
-$("tabs").onclick = (e) => {
+if (served) $("tabs").onclick = (e) => {
   const t = e.target.closest(".tab");
   if (!t) return;
   state.tab = t.dataset.tab;
   for (const b of document.querySelectorAll(".tab")) b.classList.toggle("on", b === t);
   renderView();
 };
-refresh();
+if (served) refresh();
 </script>
 </body>
 </html>
