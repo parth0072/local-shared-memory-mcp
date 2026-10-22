@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { openStore, toMarkdown, render } from "./store.js";
+import { openStore, toMarkdown, render, tokens } from "./store.js";
 
 // Tool descriptions and instructions are sent to the model every turn, so keep them short.
 const INSTRUCTIONS =
@@ -16,7 +16,22 @@ const KINDS = ["fact", "preference", "decision", "task", "note"];
 export function createServer(store = openStore()) {
   const server = new McpServer({ name: "ctx-memory", version: "0.2.0" }, { instructions: INSTRUCTIONS });
 
-  server.tool(
+  // Wrap a tool handler so every call logs its (estimated) reply size. Never lets tracking break a call.
+  const track = (name, fn) => async (args, extra) => {
+    const res = await fn(args, extra);
+    try {
+      store.recordUsage({
+        tool: name,
+        client: server.server.getClientVersion()?.name ?? "",
+        project: args?.project ?? "",
+        tokens: tokens(res.content.map((c) => c.text ?? "").join("")),
+      });
+    } catch { /* tracking is best effort */ }
+    return res;
+  };
+  const tool = (name, description, schema, fn) => server.tool(name, description, schema, track(name, fn));
+
+  tool(
     "get_context",
     "Latest handoff + top memories. Call first in every chat.",
     {
@@ -26,7 +41,7 @@ export function createServer(store = openStore()) {
     async ({ project, max_tokens }) => text(toMarkdown(store, project, { budget: max_tokens }))
   );
 
-  server.tool(
+  tool(
     "remember",
     "Save a durable fact, preference, decision or task.",
     {
@@ -43,7 +58,7 @@ export function createServer(store = openStore()) {
     }
   );
 
-  server.tool(
+  tool(
     "recall",
     "Search memory by keywords.",
     {
@@ -58,11 +73,11 @@ export function createServer(store = openStore()) {
     }
   );
 
-  server.tool("forget", "Delete a memory by id.", { id: z.number().int() }, async ({ id }) =>
+  tool("forget", "Delete a memory by id.", { id: z.number().int() }, async ({ id }) =>
     text(store.forget(id) ? `deleted #${id}` : `no memory #${id}`)
   );
 
-  server.tool(
+  tool(
     "save_handoff",
     "Save a where-we-left-off summary for the next AI.",
     {
@@ -73,11 +88,11 @@ export function createServer(store = openStore()) {
     async (a) => text(`saved handoff #${store.saveHandoff(a)}`)
   );
 
-  server.tool("list_projects", "Projects with memory counts.", {}, async () =>
+  tool("list_projects", "Projects with memory counts.", {}, async () =>
     text(store.projects().map((p) => `${p.project}: ${p.n}`).join("\n") || "none")
   );
 
-  server.tool("export_markdown", "Full memory as text, to paste into an AI without MCP.",
+  tool("export_markdown", "Full memory as text, to paste into an AI without MCP.",
     { project: z.string().optional() }, async ({ project }) => text(toMarkdown(store, project)));
 
   server.resource("context", "memory://context", { mimeType: "text/plain" }, async (uri) => ({

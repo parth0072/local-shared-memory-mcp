@@ -49,6 +49,15 @@ export function startUi({ port = 4777, store = openStore() } = {}) {
         }
         case "/api/handoffs":
           return json(res, 200, store.handoffs({ project }));
+        case "/api/usage": {
+          const days = Math.min(Math.max(Number(q.get("days")) || 7, 1), 90);
+          return json(res, 200, {
+            ...store.usageSummary({ days, project }),
+            enabled: store.usageEnabled,
+            full: tokens(toMarkdown(store, project)), // whole memory if pasted in full
+            cap: 700, // default get_context budget
+          });
+        }
         case "/api/context": {
           const budget = Math.min(Math.max(Number(q.get("max_tokens")) || 700, 100), 4000);
           const text = toMarkdown(store, project, { budget });

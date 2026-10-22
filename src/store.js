@@ -20,6 +20,7 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
     PRAGMA cache_size = -64000;
     PRAGMA temp_store = MEMORY;
     PRAGMA mmap_size = 268435456;
+    PRAGMA busy_timeout = 3000;
     CREATE TABLE IF NOT EXISTS memories (
       id INTEGER PRIMARY KEY,
       text TEXT NOT NULL,
@@ -41,6 +42,15 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS handoffs_project ON handoffs(project, created_at DESC);
+    CREATE TABLE IF NOT EXISTS usage (
+      id INTEGER PRIMARY KEY,
+      ts INTEGER NOT NULL,
+      tool TEXT NOT NULL,
+      client TEXT NOT NULL DEFAULT '',
+      project TEXT NOT NULL DEFAULT '',
+      tokens INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS usage_ts ON usage(ts);
   `);
 
   // v2: porter stemming + weighted columns; rebuild the search index once.
@@ -78,6 +88,8 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
     return s;
   };
   const now = () => Date.now();
+  const usageOn = process.env.MEMORY_USAGE !== "off";
+  try { stmt("DELETE FROM usage WHERE ts < ?").run(now() - 90 * 86400_000); } catch { /* best effort */ }
 
   function search(match, { project, kind }, fetch) {
     const where = ["memories_fts MATCH ?"];
@@ -185,6 +197,36 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
         id: Number(r.id), project: r.project, summary: r.summary, from_model: r.from_model,
         created_at: new Date(Number(r.created_at)).toISOString(),
       }));
+    },
+
+    // Usage tracking: counts only, never memory text. Token figures are estimates (chars / 4).
+    usageEnabled: usageOn,
+
+    recordUsage({ tool, client = "", project = "", tokens }) {
+      if (!usageOn) return;
+      stmt("INSERT INTO usage (ts, tool, client, project, tokens) VALUES (?,?,?,?,?)").run(now(), tool, client, project, tokens);
+    },
+
+    usageSummary({ days = 7, project } = {}) {
+      const since = now() - days * 86400_000;
+      const where = "ts >= ?" + (project ? " AND project = ?" : "");
+      const args = project ? [since, project] : [since];
+      const totals = stmt(`SELECT COUNT(*) AS calls, COALESCE(SUM(tokens), 0) AS tokens FROM usage WHERE ${where}`).get(...args);
+      const group = (col) =>
+        stmt(`SELECT ${col} AS name, COUNT(*) AS calls, SUM(tokens) AS tokens FROM usage WHERE ${where} GROUP BY ${col} ORDER BY tokens DESC`)
+          .all(...args)
+          .map((r) => ({ name: r.name || "(unknown)", calls: Number(r.calls), tokens: Number(r.tokens) }));
+      const perDay = new Map(
+        stmt(`SELECT strftime('%Y-%m-%d', ts / 1000, 'unixepoch', 'localtime') AS day, SUM(tokens) AS tokens FROM usage WHERE ${where} GROUP BY day`)
+          .all(...args).map((r) => [r.day, Number(r.tokens)])
+      );
+      const byDay = [];
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400_000);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        byDay.push({ day: key, tokens: perDay.get(key) || 0 });
+      }
+      return { days, calls: Number(totals.calls), tokens: Number(totals.tokens), byDay, byTool: group("tool"), byClient: group("client") };
     },
 
     projects() {

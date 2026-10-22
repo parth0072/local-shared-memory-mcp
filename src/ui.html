@@ -54,6 +54,17 @@
   .stat strong { color: var(--text); font-variant-numeric: tabular-nums; }
   input[type=range] { accent-color: var(--accent); }
   pre { margin: 0; padding: 14px; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.55 ui-monospace, Menlo, monospace; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 10px; }
+  .tile { padding: 10px 14px; }
+  .tl { color: var(--muted); font-size: 12.5px; }
+  .tv { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-top: 8px; }
+  .bar { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-width: 2px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 5px 4px; border-bottom: 1px solid var(--line); }
+  th:not(:first-child), td:not(:first-child) { text-align: right; }
+  th { color: var(--muted); font-weight: 500; font-size: 12.5px; }
+  .note { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
   .filter { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
   .filter button { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; }
 </style>
@@ -67,13 +78,14 @@
       <button class="tab on" data-tab="memories">Memories</button>
       <button class="tab" data-tab="handoffs">Handoffs</button>
       <button class="tab" data-tab="context">Context preview</button>
+      <button class="tab" data-tab="usage">Usage</button>
     </div>
     <div id="view"></div>
   </main>
 </div>
 <script>
 "use strict";
-const state = { project: "", kind: "", tag: "", q: "", tab: "memories", budget: 700 };
+const state = { project: "", kind: "", tag: "", q: "", tab: "memories", budget: 700, days: 7 };
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => {
   const e = Object.assign(document.createElement(tag), props);
@@ -167,6 +179,36 @@ async function renderView() {
           el("span", { textContent: `${ago(h.created_at)} · ${new Date(h.created_at).toLocaleString()}` }));
         view.append(el("div", { className: "panel card" }, meta, el("div", { className: "text", textContent: h.summary })));
       }
+    } else if (state.tab === "usage") {
+      const sel = el("select");
+      for (const d of [7, 30, 90]) sel.append(el("option", { value: d, textContent: `Last ${d} days`, selected: d === state.days }));
+      sel.onchange = () => { state.days = Number(sel.value); renderView(); };
+      view.append(el("div", { className: "toolbar" }, sel));
+      const u = await api("usage", { project: state.project, days: state.days });
+      if (!u.enabled) return view.append(empty("Usage tracking is off (MEMORY_USAGE=off)."));
+      const fmt = (n) => n.toLocaleString();
+      const tile = (label, value) =>
+        el("div", { className: "panel tile" }, el("div", { className: "tl", textContent: label }), el("div", { className: "tv", textContent: value }));
+      view.append(el("div", { className: "tiles" },
+        tile("Tokens sent (est.)", fmt(u.tokens)),
+        tile("Calls", fmt(u.calls)),
+        tile("Avg per call", u.calls ? fmt(Math.round(u.tokens / u.calls)) : "0"),
+        tile("Full memory vs cap", `${fmt(u.full)} vs ${fmt(u.cap)}`)));
+      const max = Math.max(1, ...u.byDay.map((d) => d.tokens));
+      const bars = el("div", { className: "bars" });
+      for (const d of u.byDay) {
+        bars.append(el("div", { className: "bar", title: `${d.day}: ${fmt(d.tokens)} tokens`, style: `height:${Math.max(2, Math.round((d.tokens / max) * 100))}%` }));
+      }
+      view.append(el("div", { className: "panel card" },
+        el("div", { className: "meta", textContent: "Tokens sent per day" }), bars,
+        el("div", { className: "note", textContent: "Estimates (characters ÷ 4) of what this memory server returned, not what your AI billed. Counts only; memory text is never stored." })));
+      const table = (title, rows) => {
+        const t = el("table");
+        t.append(el("tr", {}, el("th", { textContent: title }), el("th", { textContent: "Calls" }), el("th", { textContent: "Tokens" })));
+        for (const r of rows) t.append(el("tr", {}, el("td", { textContent: r.name }), el("td", { textContent: fmt(r.calls) }), el("td", { textContent: fmt(r.tokens) })));
+        return el("div", { className: "panel card" }, rows.length ? t : el("div", { className: "meta", textContent: `${title}: no calls recorded yet` }));
+      };
+      view.append(table("Tool", u.byTool), table("AI app", u.byClient));
     } else {
       const range = el("input", { type: "range", min: 100, max: 4000, step: 100, value: state.budget });
       const stat = el("strong", { textContent: "…" });

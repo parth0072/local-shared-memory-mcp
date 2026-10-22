@@ -70,6 +70,15 @@ Handoff (2d ago, claude): Goal: ship auth. Next: login route.
 
 - Tool descriptions and server instructions are kept short, since they are sent every turn.
 
+## Usage tracking
+
+The server records how many tokens it sends back to your AIs, so you can see what your memory costs.
+
+- One small row per tool call: time, tool, which AI app called it, project and the **estimated** reply size (characters ÷ 4). Memory text is never stored. Rows older than 90 days are deleted.
+- See it in the web viewer's **Usage** tab (tokens per day, by tool, by AI app, and full memory size vs the `get_context` cap), or in a terminal: `node src/cli.js usage --days 30`.
+- Turn it off with `MEMORY_USAGE=off`.
+- This measures only what this memory server sent. For your AI tools' total spend, run a tool that reads their logs, such as [AI Token Monitor](https://github.com/soulduse/ai-token-monitor).
+
 ## Manual control (no AI needed)
 
 You can manage the same database yourself from the terminal:

@@ -50,6 +50,7 @@ const opts = {
   from: { type: "string" },
   limit: { type: "string", short: "n" },
   port: { type: "string" },
+  days: { type: "string" },
 };
 const { values: o, positionals } = parseArgs({ args: process.argv.slice(3), options: opts, allowPositionals: true });
 const tagList = (v) => (v ? v.split(",").map((t) => t.trim().replace(/\s+/g, "_")).filter(Boolean) : undefined);
@@ -61,6 +62,7 @@ const help = `usage: ctx-memory <command>
   serve                          run the MCP server (default)
   init                           register in Claude Desktop / Cursor / Windsurf
   ui [--port 4777]               read-only web viewer on http://127.0.0.1:4777
+  usage [--days 7] [-p proj]     tokens this server sent to your AIs (estimates)
   add <text> [-p proj] [-k kind] [-t a,b] [-i 1-5]
   list [-p proj] [-n 20]         most important / recently used memories
   search <query> [-p proj]
@@ -111,6 +113,13 @@ else {
         const h = store.latestHandoff(o.project);
         console.log(h ? `${h.created_at}${h.from_model ? " from " + h.from_model : ""}\n\n${h.summary}` : "no handoff saved");
       } else { console.error("handoff save|show"); process.exit(1); }
+    } else if (cmd === "usage") {
+      if (!store.usageEnabled) console.log("usage tracking is off (MEMORY_USAGE=off)");
+      const u = store.usageSummary({ days: Math.min(Math.max(Number(o.days) || 7, 1), 90), project: o.project });
+      console.log(`last ${u.days} days: ${u.calls} calls, ~${u.tokens} tokens sent${u.calls ? ` (avg ${Math.round(u.tokens / u.calls)})` : ""}`);
+      for (const [title, rows] of [["by tool", u.byTool], ["by AI app", u.byClient]]) {
+        if (rows.length) console.log(`${title}:\n` + rows.map((r) => `  ${r.name.padEnd(16)} ${String(r.calls).padStart(5)} calls  ~${r.tokens} tokens`).join("\n"));
+      }
     } else if (cmd === "projects") {
       store.projects().forEach((p) => console.log(`${p.project}\t${p.n}`));
     } else if (cmd === "export") {
