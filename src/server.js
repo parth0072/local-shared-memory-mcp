@@ -6,7 +6,7 @@ import { openStore, toMarkdown, render, tokens } from "./store.js";
 // Tool descriptions and instructions are sent to the model every turn, so keep them short.
 const INSTRUCTIONS =
   "Shared memory across AI apps. Call get_context at the start of each conversation. " +
-  "Call remember for durable preferences, decisions and facts. " +
+  "Call remember proactively, without being asked, as soon as the user states a durable preference, decision or fact. " +
   "Before the user switches AI or ends a long session, call save_handoff (goal, decisions, state, next steps). " +
   "Use recall to look things up.";
 
@@ -38,12 +38,13 @@ export function createServer(store = openStore()) {
       project: z.string().optional(),
       max_tokens: z.number().int().min(100).max(4000).default(700).describe("size cap for the reply"),
     },
-    async ({ project, max_tokens }) => text(toMarkdown(store, project, { budget: max_tokens }))
+    async ({ project, max_tokens }) =>
+      text(toMarkdown(store, project, { budget: max_tokens }) + "\n(Before this chat ends, call save_handoff.)")
   );
 
   tool(
     "remember",
-    "Save a durable fact, preference, decision or task.",
+    "Save a durable fact, preference, decision or task. Do this proactively, without being asked.",
     {
       text: z.string().min(1).describe("one self-contained statement"),
       kind: z.enum(KINDS).default("fact"),

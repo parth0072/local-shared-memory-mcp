@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { serve } from "./server.js";
 import { startUi } from "./ui.js";
+import { hooksConfig, installHooks, sessionEnd, sessionStart, summarizeWorker } from "./hooks.js";
 import { openStore, toMarkdown } from "./store.js";
 
 const self = resolve(fileURLToPath(import.meta.url));
@@ -51,6 +52,8 @@ const opts = {
   limit: { type: "string", short: "n" },
   port: { type: "string" },
   days: { type: "string" },
+  summarize: { type: "boolean" },
+  write: { type: "boolean" },
 };
 const { values: o, positionals } = parseArgs({ args: process.argv.slice(3), options: opts, allowPositionals: true });
 const tagList = (v) => (v ? v.split(",").map((t) => t.trim().replace(/\s+/g, "_")).filter(Boolean) : undefined);
@@ -63,6 +66,9 @@ const help = `usage: ctx-memory <command>
   init                           register in Claude Desktop / Cursor / Windsurf
   ui [--port 4777]               read-only web viewer on http://127.0.0.1:4777
   usage [--days 7] [-p proj]     tokens this server sent to your AIs (estimates)
+  hooks install [--summarize] [--write]   Claude Code hooks: auto-load at start, auto-save at end
+                                 (prints the settings.json block; --write merges it into ~/.claude/settings.json)
+  pending | approve <id|all> | reject <id>   review auto-saved memories
   add <text> [-p proj] [-k kind] [-t a,b] [-i 1-5]
   list [-p proj] [-n 20]         most important / recently used memories
   search <query> [-p proj]
@@ -86,6 +92,12 @@ else if (cmd === "ui") {
     process.exit(1);
   }
 } else if (cmd === "help" || cmd === "--help") console.log(help);
+else if (cmd === "hooks") {
+  if (positionals[0] !== "install") { console.error("usage: hooks install [--summarize] [--write]"); process.exit(1); }
+  const cfg = hooksConfig({ self, summarize: o.summarize });
+  if (o.write) console.log(`Hooks written to ${installHooks({ self, summarize: o.summarize })} (previous file saved as .bak). Restart Claude Code.`);
+  else console.log(JSON.stringify(cfg, null, 2) + "\n\nMerge this into ~/.claude/settings.json, or re-run with --write to do it for you (backs up first).");
+}
 else {
   const store = openStore();
   try {
@@ -120,6 +132,21 @@ else {
       for (const [title, rows] of [["by tool", u.byTool], ["by AI app", u.byClient]]) {
         if (rows.length) console.log(`${title}:\n` + rows.map((r) => `  ${r.name.padEnd(16)} ${String(r.calls).padStart(5)} calls  ~${r.tokens} tokens`).join("\n"));
       }
+    } else if (cmd === "pending") {
+      const rows = store.pending();
+      if (rows.length) rows.forEach(show); else console.log("no pending memories");
+    } else if (cmd === "approve") {
+      const a = need(positionals[0], "approve: id or 'all' required");
+      console.log(`approved ${store.approve(a === "all" ? "all" : Number(a))}`);
+    } else if (cmd === "reject") {
+      const id = Number(need(positionals[0], "reject: id required"));
+      console.log(store.reject(id) ? `rejected #${id}` : `no pending memory #${id}`);
+    } else if (cmd === "hook") {
+      const sub = positionals[0];
+      if (sub === "session-start") sessionStart(store);
+      else if (sub === "session-end") sessionEnd(store, { summarize: o.summarize, self });
+      else if (sub === "summarize-worker") summarizeWorker(store, { transcript: positionals[1], project: positionals[2] });
+      else { console.error("hook session-start | session-end"); process.exitCode = 1; }
     } else if (cmd === "projects") {
       store.projects().forEach((p) => console.log(`${p.project}\t${p.n}`));
     } else if (cmd === "export") {

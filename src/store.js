@@ -53,6 +53,11 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
     CREATE INDEX IF NOT EXISTS usage_ts ON usage(ts);
   `);
 
+  // Added later: auto-captured memories start 'pending' until approved. Plain ALTER, no index rebuild.
+  if (!db.prepare("PRAGMA table_info(memories)").all().some((c) => c.name === "status")) {
+    db.exec("ALTER TABLE memories ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'");
+  }
+
   // v2: porter stemming + weighted columns; rebuild the search index once.
   if (db.prepare("PRAGMA user_version").get().user_version < SCHEMA_VERSION) {
     db.exec(`
@@ -92,7 +97,7 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
   try { stmt("DELETE FROM usage WHERE ts < ?").run(now() - 90 * 86400_000); } catch { /* best effort */ }
 
   function search(match, { project, kind }, fetch) {
-    const where = ["memories_fts MATCH ?"];
+    const where = ["memories_fts MATCH ?", "m.status = 'approved'"];
     const args = [match];
     if (project) { where.push("m.project IN (?, 'global')"); args.push(project); }
     if (kind) { where.push("m.kind = ?"); args.push(kind); }
@@ -105,7 +110,7 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
   }
 
   return {
-    remember({ text, kind = "fact", project = "global", tags = [], importance = 3, source = "" }) {
+    remember({ text, kind = "fact", project = "global", tags = [], importance = 3, source = "", status = "approved" }) {
       const t = now();
       const dup = stmt("SELECT id FROM memories WHERE project = ? AND text = ?").get(project, text);
       if (dup) {
@@ -113,8 +118,8 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
         return { id: Number(dup.id), duplicate: true };
       }
       const r = stmt(
-        "INSERT INTO memories (text, kind, project, tags, importance, source, created_at, last_used) VALUES (?,?,?,?,?,?,?,?)"
-      ).run(text, kind, project, tags.join(" "), importance, source, t, t);
+        "INSERT INTO memories (text, kind, project, tags, importance, source, created_at, last_used, status) VALUES (?,?,?,?,?,?,?,?,?)"
+      ).run(text, kind, project, tags.join(" "), importance, source, t, t, status);
       return { id: Number(r.lastInsertRowid), duplicate: false };
     },
 
@@ -142,12 +147,12 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
     // Best memories for a project (plus global), ranked by importance decayed by time since last use.
     recent({ project, limit = 10 }) {
       const cand = limit <= 100 ? Math.max(limit * 5, 50) : limit;
-      const q = "SELECT * FROM memories WHERE project = ? ORDER BY importance DESC, last_used DESC LIMIT ?";
+      const q = "SELECT * FROM memories WHERE project = ? AND status = 'approved' ORDER BY importance DESC, last_used DESC LIMIT ?";
       let rows;
       if (project) {
         rows = [...stmt(q).all(project, cand), ...(project === "global" ? [] : stmt(q).all("global", cand))];
       } else {
-        rows = stmt("SELECT * FROM memories ORDER BY importance DESC, last_used DESC LIMIT ?").all(cand);
+        rows = stmt("SELECT * FROM memories WHERE status = 'approved' ORDER BY importance DESC, last_used DESC LIMIT ?").all(cand);
       }
       const t = now();
       const rank = (r) => Number(r.importance) * 0.5 ** ((t - Number(r.last_used)) / 86400_000 / 60);
@@ -234,7 +239,23 @@ export function openStore(path = process.env.MEMORY_DB_PATH || DEFAULT_DB) {
     },
 
     all() {
-      return stmt("SELECT * FROM memories ORDER BY project, importance DESC, id").all().map(fmt);
+      return stmt("SELECT * FROM memories WHERE status = 'approved' ORDER BY project, importance DESC, id").all().map(fmt);
+    },
+
+    // Auto-captured memories waiting for review (kept out of search and context until approved).
+    pending() {
+      return stmt("SELECT * FROM memories WHERE status = 'pending' ORDER BY id").all().map(fmt);
+    },
+
+    approve(id) { // a memory id, or "all"
+      const r = id === "all"
+        ? stmt("UPDATE memories SET status = 'approved' WHERE status = 'pending'").run()
+        : stmt("UPDATE memories SET status = 'approved' WHERE id = ? AND status = 'pending'").run(id);
+      return Number(r.changes);
+    },
+
+    reject(id) {
+      return Number(stmt("DELETE FROM memories WHERE id = ? AND status = 'pending'").run(id).changes) > 0;
     },
 
     close() { db.close(); },
@@ -259,7 +280,26 @@ function fmt(r) {
     importance: Number(r.importance),
     created_at: new Date(Number(r.created_at)).toISOString(),
     used: Number(r.last_used),
+    status: r.status ?? "approved",
   };
+}
+
+// Scrub likely secrets before anything auto-captured is stored.
+const SECRET_PATTERNS = [
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+  /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}/g,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}/g,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}/g,
+  /\bAIza[0-9A-Za-z_-]{30,}/g,
+  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g,
+  /\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*/gi,
+];
+export function redact(s) {
+  let out = s;
+  for (const p of SECRET_PATTERNS) out = out.replace(p, "[redacted]");
+  return out.replace(/\b(password|passwd|secret|token|api[_-]?key)(\s*[:=]\s*)\S+/gi, "$1$2[redacted]");
 }
 
 // ---- context shaping: keep what the model sees small ----

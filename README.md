@@ -48,6 +48,21 @@ Handoff (2d ago, claude): Goal: ship auth. Next: login route.
 (+12 more; use recall)
 ```
 
+## Auto-save
+
+- **All tools:** the server tells models to `remember` proactively, and `get_context` reminds them to `save_handoff` before the chat ends. Models can still ignore this.
+- **Claude Code (hooks):** loads memory automatically at session start and saves a handoff at session end, with no model involved.
+
+```bash
+node src/cli.js hooks install              # prints the settings.json block
+node src/cli.js hooks install --write      # merges it into ~/.claude/settings.json (backs up first)
+node src/cli.js hooks install --summarize  # at session end, also ask `claude -p` for a real handoff + candidate memories (uses some of your Claude usage)
+```
+
+The project name is the folder Claude Code runs in (override with `MEMORY_PROJECT`). Without `--summarize` the end-of-session handoff is a free, crude extract of your last requests and the last reply.
+
+Safeguards: likely secrets (API keys, tokens, `password=`) are redacted before anything auto-saved is stored. Memories captured by `--summarize` start **pending** and stay out of `get_context` and `recall` until you run `node src/cli.js approve <id|all>` (see them with `pending`, drop one with `reject <id>`). `MEMORY_AUTOSAVE=off` disables saving.
+
 ## Other AI tools
 
 Configs below follow each tool's documented format and are not all tested. Replace `/path/to/local-shared-memory-mcp` with your clone. Restart the tool afterwards.

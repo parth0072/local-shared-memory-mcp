@@ -146,6 +146,7 @@ function memoryCard(m) {
   const meta = el("div", { className: "meta" },
     el("span", { textContent: `#${m.id}` }),
     el("span", { className: "badge", textContent: m.kind }));
+  if (m.status === "pending") meta.append(el("span", { className: "badge", textContent: "pending review" }));
   if (!state.project) meta.append(el("span", { textContent: m.project }));
   meta.append(el("span", { className: "imp", title: `importance ${m.importance}`, textContent: "●".repeat(m.importance) }),
     el("span", { textContent: ago(m.created_at) }));
