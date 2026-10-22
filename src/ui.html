@@ -201,7 +201,7 @@ async function renderView() {
       }
       view.append(el("div", { className: "panel card" },
         el("div", { className: "meta", textContent: "Tokens sent per day" }), bars,
-        el("div", { className: "note", textContent: "Estimates (characters ÷ 4) of what this memory server returned, not what your AI billed. Counts only; memory text is never stored." })));
+        el("div", { className: "note", textContent: "Estimates (characters ÷ 4) of what this memory server returned. Counts only; memory text is never stored." })));
       const table = (title, rows) => {
         const t = el("table");
         t.append(el("tr", {}, el("th", { textContent: title }), el("th", { textContent: "Calls" }), el("th", { textContent: "Tokens" })));

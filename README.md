@@ -82,8 +82,7 @@ node src/cli.js usage --days 30   # tokens this server sent to your AIs
 
 The viewer shows memories (search, project/kind/tag filters), handoffs, a `get_context` preview with token size, and a **Usage** tab. It binds to `127.0.0.1`, answers GET only and refuses non-local `Host` headers.
 
-Usage tracking stores one row per tool call (time, tool, AI app, project, estimated tokens = chars ÷ 4), never memory text, and prunes after 90 days. Turn it off with `MEMORY_USAGE=off`. It measures only what this server sent, not your AIs' total spend.
-
+Usage tracking stores one row per tool call (time, tool, AI app, project, estimated tokens = chars ÷ 4), never memory text, and prunes after 90 days. Turn it off with `MEMORY_USAGE=off`.
 ## Limits and roadmap
 
 - Search matches words, not meaning, and a model saves memory only if it chooses to call the tools.
